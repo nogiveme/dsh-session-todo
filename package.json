@@ -1,0 +1,43 @@
+{
+  "name": "@local/dsh-session-todo",
+  "version": "4.3.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Workspace task control center: projects, task boards, a session-grouped prompt graph with durable per-session task attribution and native session-title sync, and a keyboard quick task switcher. Opening a session from a prompt board attributes it to that task; the assignment is persisted and shown on every later entry until Cancel.",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "store.js",
+    "prompt-tracker.js",
+    "routes.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md"
+  ],
+  "engines": {
+    "dsh": ">=0.2.2-rc.5 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ]
+    }
+  }
+}
