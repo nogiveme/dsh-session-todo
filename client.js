@@ -16,6 +16,8 @@ window.__ModuleLoader__.load({
     // reader into another task days later.
     const JUMP_NOTICE_TTL_MS = 10 * 60 * 1000
     const QUICK_TASKS_CACHE_KEY = 'tasks'
+    // Mirrors the Host's MAX_PROMPT_CHARS: a longer draft cannot become a node.
+    const MAX_DRAFT_CHARS = 20000
 
     // Like a git graph, each Session branch keeps one vivid accent so its
     // bullets and rail stay distinguishable in both light and dark themes.
@@ -63,7 +65,6 @@ window.__ModuleLoader__.load({
       'error.render': '任务中心渲染失败：{message}',
       'errors.workspaceMissing': '这个工作区已经不存在了。',
       'errors.taskMissing': '这个任务已经不存在了。',
-      'errors.promptMissing': '这条 Prompt 已经不存在了。',
       'errors.sessionMissing': '所选会话不属于这个工作区。',
       'errors.titleRequired': '任务标题不能为空。',
       'errors.sessionTitleRequired': '会话标题不能为空。',
@@ -101,9 +102,6 @@ window.__ModuleLoader__.load({
       'task.noPrompts': '还没有 Prompt',
       'task.noPromptsHint': '添加 Prompt 会打开所选会话；本会话后续发送都会成为这个任务的节点。归属会持久保留（刷新或重连后仍显示），点「取消」才会取消。',
       'task.updated': '更新 {time}',
-      'task.removePrompt': '从任务中移除',
-      'task.removePromptConfirm': '移除这条 Prompt 记录？原生会话中的消息不会被删除。',
-      'task.removed': '已从任务中移除。',
       'task.saved': '已保存。',
       'task.sessionRenamed': '会话标题已更新。',
       'group.noSession': '未绑定会话',
@@ -121,6 +119,7 @@ window.__ModuleLoader__.load({
       'status.draft': '待发送',
       'status.queued': '排队中',
       'status.running': '执行中',
+      'status.waiting': '等待依赖',
       'status.done': '完成',
       'status.failed': '失败',
       'status.cancelled': '已取消',
@@ -136,9 +135,40 @@ window.__ModuleLoader__.load({
       'picker.noMatches': '没有标题匹配的 Session。',
       'picker.existing': '已有 {count} 条',
       'picker.live': '运行中',
+      'capture.wait': '等待',
+      'capture.waiting': '正在读取节点…',
+      'wait.title': '等待节点',
+      'wait.hint': '选择一个或多个节点；全部结束后发送当前输入。',
+      'wait.search': '搜索 Prompt、任务或项目',
+      'wait.clearSearch': '清除检索',
+      'wait.empty': '没有可等待的节点。',
+      'wait.noMatches': '没有匹配的节点。',
+      'wait.selected.one': '已选 {count} 个节点',
+      'wait.selected.other': '已选 {count} 个节点',
+      'wait.submit': '提交并等待',
+      'wait.submitting': '正在提交…',
+      'wait.error.select': '至少选择一个节点。',
+      'wait.error.noDraft': '当前输入框没有可发送的内容。',
+      'wait.error.busy': '输入框正在提交，请稍后再试。',
+      'wait.error.attachments': '带附件或文件引用的草稿暂不支持等待发送。',
+      'wait.error.command': '命令草稿暂不支持等待发送。',
+      'wait.error.composer': '找不到当前输入框。',
+      'wait.error.quoted': '带引用或链接引用的草稿暂不支持等待发送。',
+      'wait.error.tooLong': 'Prompt 超过 20000 字符，无法等待发送。',
+      'error.loadCandidates': '读取节点列表失败：{message}',
+      'node.waitingFor.one': '等待 {count} 个节点',
+      'node.waitingFor.other': '等待 {count} 个节点',
+      'task.waitingCount.one': '{count} 个等待依赖',
+      'task.waitingCount.other': '{count} 个等待依赖',
+      'jump.waiting': '这条 Prompt 还在等待依赖节点结束。',
+      'errors.dependencyRequired': '至少选择一个依赖节点。',
+      'errors.dependencyMissing': '依赖节点不存在。',
+      'errors.dependencyNotExecutable': '依赖节点不可执行。',
+      'errors.tooManyDependencies': '依赖节点过多。',
+      'errors.textRequired': 'Prompt 内容不能为空。',
       'capture.back': '返回',
       'capture.cancel': '取消',
-      'capture.armed': '本会话已归属该任务，后续发送都会记录；刷新或重连后仍会保留。点「返回」打开任务看板，点「取消」取消归属并停止记录。',
+      'capture.armed': '本会话已归属该任务，后续发送都会记录；刷新或重连后仍会保留。点「等待」选择多个节点并提交等待；点「返回」打开任务看板，点「取消」取消归属并停止记录。',
       'jump.locating': '正在打开原生会话并定位…',
       'jump.done': '已定位到原生会话。',
       'jump.failed': '没有在原生会话中找到这条 Prompt。可能历史尚未加载，或这条消息已不在当前会话窗口内。',
@@ -186,7 +216,6 @@ window.__ModuleLoader__.load({
       'error.render': 'Task center failed to render: {message}',
       'errors.workspaceMissing': 'This workspace no longer exists.',
       'errors.taskMissing': 'This task no longer exists.',
-      'errors.promptMissing': 'This prompt no longer exists.',
       'errors.sessionMissing': 'The selected session does not belong to this workspace.',
       'errors.titleRequired': 'A task title is required.',
       'errors.sessionTitleRequired': 'A session title is required.',
@@ -224,9 +253,6 @@ window.__ModuleLoader__.load({
       'task.noPrompts': 'No prompts yet',
       'task.noPromptsHint': 'Add prompt opens the chosen session; later sends in it become nodes of this task. The attribution stays durable across refreshes and reconnects; only Cancel removes it.',
       'task.updated': 'Updated {time}',
-      'task.removePrompt': 'Remove from task',
-      'task.removePromptConfirm': 'Remove this prompt record? The native session message is not deleted.',
-      'task.removed': 'Removed from the task.',
       'task.saved': 'Saved.',
       'task.sessionRenamed': 'Session title updated.',
       'group.noSession': 'No session bound',
@@ -244,6 +270,7 @@ window.__ModuleLoader__.load({
       'status.draft': 'Draft',
       'status.queued': 'Queued',
       'status.running': 'Running',
+      'status.waiting': 'Waiting',
       'status.done': 'Done',
       'status.failed': 'Failed',
       'status.cancelled': 'Cancelled',
@@ -259,9 +286,40 @@ window.__ModuleLoader__.load({
       'picker.noMatches': 'No sessions match this title.',
       'picker.existing': '{count} in task',
       'picker.live': 'Running',
+      'capture.wait': 'Wait',
+      'capture.waiting': 'Loading nodes…',
+      'wait.title': 'Wait for nodes',
+      'wait.hint': 'Select one or more nodes; the current input sends after all of them finish.',
+      'wait.search': 'Search prompts, tasks or projects',
+      'wait.clearSearch': 'Clear search',
+      'wait.empty': 'No nodes to wait for.',
+      'wait.noMatches': 'No nodes match.',
+      'wait.selected.one': '{count} node selected',
+      'wait.selected.other': '{count} nodes selected',
+      'wait.submit': 'Submit and wait',
+      'wait.submitting': 'Submitting…',
+      'wait.error.select': 'Select at least one node.',
+      'wait.error.noDraft': 'The composer has no content to send.',
+      'wait.error.busy': 'The composer is busy; try again.',
+      'wait.error.attachments': 'Drafts with attachments or file references cannot wait yet.',
+      'wait.error.command': 'Command drafts cannot wait yet.',
+      'wait.error.composer': 'The composer is unavailable.',
+      'wait.error.quoted': 'Drafts with quotes or linked references cannot wait yet.',
+      'wait.error.tooLong': 'The prompt exceeds 20,000 characters.',
+      'error.loadCandidates': 'Failed to load nodes: {message}',
+      'node.waitingFor.one': 'Waiting for {count} node',
+      'node.waitingFor.other': 'Waiting for {count} nodes',
+      'task.waitingCount.one': '{count} waiting',
+      'task.waitingCount.other': '{count} waiting',
+      'jump.waiting': 'This prompt is still waiting for its dependency nodes.',
+      'errors.dependencyRequired': 'Select at least one dependency node.',
+      'errors.dependencyMissing': 'A dependency node no longer exists.',
+      'errors.dependencyNotExecutable': 'A dependency node is not executable.',
+      'errors.tooManyDependencies': 'Too many dependency nodes.',
+      'errors.textRequired': 'Prompt content cannot be empty.',
       'capture.back': 'Back',
       'capture.cancel': 'Cancel',
-      'capture.armed': 'This session is assigned to this task, and later sends are recorded. The assignment survives refreshes and reconnects. Back opens the task board; Cancel removes the assignment and stops recording.',
+      'capture.armed': 'This session is assigned to this task, and later sends are recorded. The assignment survives refreshes and reconnects. Wait opens the dependency picker and submits the current draft after the selected nodes finish; Back opens the task board; Cancel removes the assignment and stops recording.',
       'jump.locating': 'Opening the native session and locating…',
       'jump.done': 'Located in the native session.',
       'jump.failed': 'Could not find this prompt in the native session. Its history may not be loaded, or the message is no longer in the current window.',
@@ -288,8 +346,8 @@ window.__ModuleLoader__.load({
 .st-shell{max-width:1120px;min-height:100%;margin:0 auto;padding:28px 28px 56px;display:flex;flex-direction:column;gap:18px;box-sizing:border-box}
 .st-pageHead{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap}
 .st-pageHeadMain{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1}
-.st-back{display:inline-flex;align-items:center;gap:4px;align-self:flex-start;height:24px;padding:0 7px 0 5px;margin-bottom:2px;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--st-radius);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;cursor:pointer}
-.st-back:hover{border-color:var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);background:color-mix(in srgb,var(--dsw-alias-label-primary) 5%,transparent)}
+.st-back{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;height:32px;padding:0 13px 0 10px;margin-bottom:2px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--st-radius);background:color-mix(in srgb,var(--dsw-alias-label-primary) 4%,transparent);color:var(--dsw-alias-label-primary);font:inherit;font-size:12.5px;font-weight:500;cursor:pointer}
+.st-back:hover{border-color:var(--dsw-alias-border-l3);color:var(--dsw-alias-label-primary);background:color-mix(in srgb,var(--dsw-alias-label-primary) 8%,transparent)}
 .st-eyebrow{font-size:10px;line-height:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--dsw-alias-label-secondary)}
 .st-pageTitle{font-size:23px;line-height:31px;margin:0;font-weight:650;overflow:hidden;text-overflow:ellipsis}
 .st-pageSubtitle{margin:0;font-size:12.5px;line-height:19px;color:var(--dsw-alias-label-secondary);max-width:72ch;word-break:break-word}
@@ -365,12 +423,9 @@ window.__ModuleLoader__.load({
 @keyframes stNodePulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--st-accent) 42%,transparent)}55%{box-shadow:0 0 0 4px transparent}}
 .st-nodeRow:hover{background:color-mix(in srgb,var(--dsw-alias-label-primary) 5%,transparent)}
 .st-node{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;padding:8px 6px;border:none;border-radius:var(--st-radius);background:transparent;color:inherit;font:inherit;text-align:start;cursor:pointer}
-.st-nodeText{font-size:12.5px;line-height:19px;white-space:pre-wrap;word-break:break-word;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.st-nodeText{font-size:12.5px;line-height:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .st-nodeMeta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:10.5px;line-height:14px;color:var(--dsw-alias-label-secondary)}
 .st-nodeError{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:34ch;color:var(--dsw-alias-state-error-primary)}
-.st-nodeRemove{opacity:0;margin-top:4px;transition:opacity .12s ease}
-@media (hover:none){.st-nodeRemove{opacity:1}}
-.st-nodeRow:hover .st-nodeRemove,.st-nodeRow:focus-within .st-nodeRemove{opacity:1}
 .st-preview{position:fixed;z-index:140;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;max-height:min(62vh,520px);overflow:auto;padding:13px 14px;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--st-radius);background:var(--dsw-alias-bg-overlay);box-shadow:0 20px 52px color-mix(in srgb,var(--dsw-alias-label-primary) 18%,transparent)}
 .st-previewHead{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .st-previewTitle{font-size:11px;line-height:15px;font-weight:600;color:var(--dsw-alias-label-primary)}
@@ -411,6 +466,15 @@ window.__ModuleLoader__.load({
 .st-quickRowTime{flex:none;font-size:10.5px;line-height:15px;color:var(--dsw-alias-label-secondary);white-space:nowrap}
 .st-quickEmpty{padding:24px 12px;text-align:center;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
 .st-quickFoot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 18px 11px;border-top:1px solid var(--dsw-alias-border-l1);font-size:10.5px;line-height:15px;color:var(--dsw-alias-label-secondary)}
+.st-waitRow[data-selected="true"]{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 10%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 38%,var(--dsw-alias-border-l1))}
+.st-waitCheck{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border:1px solid var(--dsw-alias-border-l2);border-radius:4px;background:transparent;color:transparent;flex:none}
+.st-waitRow[data-selected="true"] .st-waitCheck{border-color:var(--dsw-alias-brand-primary);background:var(--dsw-alias-brand-primary);color:#fff}
+.st-waitFoot{display:flex;align-items:center;gap:12px;padding:9px 18px 11px;border-top:1px solid var(--dsw-alias-border-l1);font-size:10.5px;line-height:15px;color:var(--dsw-alias-label-secondary)}
+.st-waitCount{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-waitSubmit{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:0;border-radius:50%;background:var(--dsw-alias-brand-primary);color:#fff;cursor:pointer;flex:none}
+.st-waitSubmit:hover:not(:disabled){filter:brightness(1.06)}
+.st-waitSubmit:disabled{opacity:.42;cursor:default}
+.st-waitError{padding:0 18px 8px;color:var(--dsw-alias-state-error-primary);font-size:11px;line-height:16px}
 .st-capture{--st-radius:var(--dsw-radius-panel,28px);box-sizing:border-box;display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:calc(100% - var(--dsh-composer-side-clearance,16px) - var(--dsh-composer-side-clearance,16px));max-width:var(--dsh-composer-card-max-width,100%);min-height:52px;padding:12px 18px;margin:4px auto;border:1px solid var(--dsw-alias-border-l1);border-radius:var(--st-radius);background:var(--dsw-alias-bg-layer-1);font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
 .st-captureDot{width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-brand-primary);flex:none}
 .st-captureTitle{flex:0 1 auto;max-width:min(58%,520px);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:18px;font-weight:600;color:var(--dsw-alias-label-primary)}
@@ -422,7 +486,7 @@ window.__ModuleLoader__.load({
 .st-captureActions{display:flex;align-items:center;gap:10px;flex:none;margin-left:auto}
 .st-captureBtn{border:none;background:transparent;padding:0;color:var(--dsw-alias-brand-primary);font:inherit;font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;flex:none}
 .st-muted{font-size:11.5px;line-height:17px;color:var(--dsw-alias-label-secondary)}
-.st-btn:focus-visible,.st-iconBtn:focus-visible,.st-back:focus-visible,.st-wsCard:focus-visible,.st-taskCard:focus-visible,.st-node:focus-visible,.st-option:focus-visible,.st-input:focus-visible,.st-textarea:focus-visible,.st-captureBtn:focus-visible,.st-captureInfoBtn:focus-visible,.st-quickRow:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
+.st-btn:focus-visible,.st-iconBtn:focus-visible,.st-back:focus-visible,.st-wsCard:focus-visible,.st-taskCard:focus-visible,.st-node:focus-visible,.st-option:focus-visible,.st-input:focus-visible,.st-textarea:focus-visible,.st-captureBtn:focus-visible,.st-captureInfoBtn:focus-visible,.st-quickRow:focus-visible,.st-waitRow:focus-visible,.st-waitSubmit:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
 @media (max-width:720px){.st-shell{padding:18px 14px 36px}.st-actions{padding-top:0;width:100%}.st-pageHead{gap:10px}.st-grid{grid-template-columns:minmax(0,1fr)}}
 @media (prefers-reduced-motion:reduce){.st-wsCard,.st-taskCard,.st-nodeRow::before{transition:none;animation:none}.st-skeleton{animation:none}}
 `
@@ -446,6 +510,9 @@ window.__ModuleLoader__.load({
       info: ['M8 1.8a6.2 6.2 0 1 0 0 12.4A6.2 6.2 0 0 0 8 1.8Z', 'M8 7.2v3.4', 'M8 4.9h.01'],
       check: ['M3.4 8.4 6.4 11.4 12.6 4.6'],
       switch: ['M2.8 5.4h9.4', 'M9.6 3.2l2.2 2.2-2.2 2.2', 'M13.2 10.6H3.8', 'M6.4 8.4l-2.2 2.2 2.2 2.2'],
+      // Send arrow plus a small clock badge: submit-and-wait, deliberately
+      // distinct from the native composer's plain send arrow.
+      sendWait: ['M2.2 6.2h8.4', 'M8.4 3.4 11.2 6.2 8.4 9', 'M12.1 8.9a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z', 'M12.1 9.9v1.5l1.1.7'],
     }
 
     // Path elements are constant per icon; build them once, reuse on every render.
@@ -477,6 +544,17 @@ window.__ModuleLoader__.load({
 
     function hasText(value) {
       return typeof value === 'string' && value.trim().length > 0
+    }
+
+    /**
+     * Whether a key event is still part of an IME composition. Enter/Escape
+     * used to confirm or cancel a candidate must not also submit a form,
+     * rename a session, or move a selection.
+     * @param {object} event - React synthetic or native keyboard event.
+     * @returns {boolean}
+     */
+    function isImeComposing(event) {
+      return Boolean(event?.nativeEvent?.isComposing ?? event?.isComposing)
     }
 
     /** Build one Intl object per locale: they are expensive to construct. */
@@ -555,6 +633,7 @@ window.__ModuleLoader__.load({
       draft: ['status.draft', ''],
       queued: ['status.queued', 'warn'],
       running: ['status.running', 'run'],
+      waiting: ['status.waiting', 'warn'],
       done: ['status.done', 'done'],
       failed: ['status.failed', 'error'],
       cancelled: ['status.cancelled', 'error'],
@@ -601,9 +680,13 @@ window.__ModuleLoader__.load({
     const ERROR_KEYS = {
       workspace_not_found: 'errors.workspaceMissing',
       task_not_found: 'errors.taskMissing',
-      prompt_not_found: 'errors.promptMissing',
       session_not_in_workspace: 'errors.sessionMissing',
       title_required: 'errors.titleRequired',
+      dependency_required: 'errors.dependencyRequired',
+      dependency_not_found: 'errors.dependencyMissing',
+      dependency_not_executable: 'errors.dependencyNotExecutable',
+      too_many_dependencies: 'errors.tooManyDependencies',
+      text_required: 'errors.textRequired',
       body_too_large: 'errors.bodyTooLarge',
       invalid_json: 'errors.invalidJson',
     }
@@ -764,7 +847,7 @@ window.__ModuleLoader__.load({
             ? h(
                 'button',
                 { type: 'button', className: 'st-back', onClick: back.onClick, title: back.label },
-                Icon('back', 12),
+                Icon('back', 16),
                 h('span', null, back.label),
               )
             : null,
@@ -869,6 +952,7 @@ window.__ModuleLoader__.load({
               placeholder: t('form.titlePlaceholder'),
               onChange: (event) => setTitle(event.target.value),
               onKeyDown: (event) => {
+                if (isImeComposing(event)) return
                 if (event.key === 'Enter') submit()
                 if (event.key === 'Escape') onCancel()
               },
@@ -1055,6 +1139,9 @@ window.__ModuleLoader__.load({
                 task.activePromptCount > 0
                   ? h('span', { className: 'st-chip', 'data-tone': 'run' }, t('board.activeCount', { count: task.activePromptCount }))
                   : null,
+                task.waitingPromptCount > 0
+                  ? h('span', { className: 'st-chip', 'data-tone': 'warn' }, countText(t, locale, 'task.waitingCount', task.waitingPromptCount))
+                  : null,
               ),
               h(
                 'span',
@@ -1122,7 +1209,7 @@ window.__ModuleLoader__.load({
       const [query, setQuery] = React.useState('')
       React.useEffect(() => {
         const onKey = (event) => {
-          if (event.key === 'Escape') onClose()
+          if (event.key === 'Escape' && !isImeComposing(event)) onClose()
         }
         document.addEventListener('keydown', onKey)
         return () => document.removeEventListener('keydown', onKey)
@@ -1361,6 +1448,7 @@ window.__ModuleLoader__.load({
         if (task) runtime.navigateToTask(task.workspaceId, task.id)
       }
       const onInputKeyDown = (event) => {
+        if (isImeComposing(event)) return
         if (event.key === 'Escape') {
           event.preventDefault()
           runtime.closeQuickSwitcher()
@@ -1445,7 +1533,7 @@ window.__ModuleLoader__.load({
             'aria-modal': 'true',
             'aria-label': t('quick.title'),
             onKeyDown: (event) => {
-              if (event.key !== 'Escape') return
+              if (event.key !== 'Escape' || isImeComposing(event)) return
               event.preventDefault()
               runtime.closeQuickSwitcher()
             },
@@ -1490,57 +1578,295 @@ window.__ModuleLoader__.load({
     }
 
     // ---------------------------------------------------------------------
+    // Wait-for-nodes picker
+    // ---------------------------------------------------------------------
+
+    function WaitPicker() {
+      const runtime = useRuntime()
+      const { t } = runtime
+      const locale = runtime.locale()
+      const picker = useStoreValue(runtime.waitPicker)
+      const open = Boolean(picker)
+      const sessionRows = useSessionRows()
+      const [candidates, setCandidates] = React.useState([])
+      const [loading, setLoading] = React.useState(false)
+      const [error, setError] = React.useState(null)
+      const [query, setQuery] = React.useState('')
+      const [selected, setSelected] = React.useState(() => new Set())
+      const [submitting, setSubmitting] = React.useState(false)
+      const [reloadNonce, setReloadNonce] = React.useState(0)
+      const commitRef = React.useRef(null)
+      const scopeRef = React.useRef(null)
+      const inputRef = React.useRef(null)
+
+      React.useEffect(() => {
+        if (!open) return undefined
+        let alive = true
+        setLoading(true)
+        setError(null)
+        runtime.request('/prompt-candidates?limit=200', undefined, { retries: 1, timeoutMs: 8000 })
+          .then((payload) => {
+            if (!alive) return
+            const prompts = Array.isArray(payload.prompts) ? payload.prompts : []
+            setCandidates(prompts)
+            // A node deleted since the last opening must not remain selected
+            // invisibly; prune it so the footer count matches what is shown.
+            const visible = new Set(prompts.map((prompt) => prompt.id))
+            setSelected((current) => {
+              if (current.size === 0) return current
+              const next = new Set([...current].filter((id) => visible.has(id)))
+              return next.size === current.size ? current : next
+            })
+          })
+          .catch((failure) => {
+            if (alive) setError(localizedError(failure, t))
+          })
+          .finally(() => {
+            if (alive) setLoading(false)
+          })
+        return () => { alive = false }
+      }, [open, picker?.sessionId, picker?.taskId, reloadNonce, runtime, t])
+
+      React.useEffect(() => {
+        if (!open) return undefined
+        setQuery('')
+        setSubmitting(false)
+        const scope = `${picker?.workspaceId ?? ''}|${picker?.sessionId ?? ''}|${picker?.taskId ?? ''}`
+        if (scopeRef.current !== scope) {
+          scopeRef.current = scope
+          setSelected(new Set())
+          commitRef.current = null
+        }
+        const timer = window.setTimeout(() => inputRef.current?.focus(), 0)
+        return () => window.clearTimeout(timer)
+      }, [open, picker?.workspaceId, picker?.sessionId, picker?.taskId])
+
+      const titleOf = (candidate) => {
+        const session = sessionRows[candidate.sessionId]
+        return hasText(session?.title) ? session.title.trim() : t('group.untitled')
+      }
+      const filtered = React.useMemo(() => {
+        const needle = query.trim().toLowerCase()
+        if (!needle) return candidates
+        return candidates.filter((candidate) => {
+          const haystack = [
+            candidate.text,
+            candidate.taskTitle,
+            candidate.workspaceTitle,
+            candidate.workspacePath,
+            titleOf(candidate),
+          ].filter(Boolean).join('\n').toLowerCase()
+          return haystack.includes(needle)
+        })
+      }, [candidates, query, sessionRows, t])
+
+      if (!open) return null
+
+      const toggle = (id) => {
+        commitRef.current = null
+        setSelected((current) => {
+          const next = new Set(current)
+          if (next.has(id)) next.delete(id)
+          else next.add(id)
+          return next
+        })
+        setError(null)
+      }
+      const submit = async () => {
+        if (selected.size === 0) {
+          setError(t('wait.error.select'))
+          return
+        }
+        setSubmitting(true)
+        setError(null)
+        if (!commitRef.current) {
+          try {
+            commitRef.current = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
+          } catch {
+            commitRef.current = `${Date.now()}-${Math.random()}`
+          }
+        }
+        try {
+          await runtime.submitWaitingDraft(picker, [...selected], commitRef.current)
+          commitRef.current = null
+          setSelected(new Set())
+          runtime.closeWaitPicker()
+        } catch (failure) {
+          setError(localizedError(failure, t))
+        } finally {
+          setSubmitting(false)
+        }
+      }
+      const onKeyDown = (event) => {
+        if (event.key !== 'Escape' || isImeComposing(event)) return
+        event.preventDefault()
+        runtime.closeWaitPicker()
+      }
+
+      let body
+      if (loading && candidates.length === 0) {
+        body = h(LoadingBlock, { lines: 2 })
+      } else if (error && candidates.length === 0) {
+        body = h(ErrorBlock, {
+          message: t('error.loadCandidates', { message: error }),
+          onRetry: () => setReloadNonce((value) => value + 1),
+        })
+      } else if (filtered.length === 0) {
+        body = h('div', { className: 'st-quickEmpty' }, query.trim() ? t('wait.noMatches') : t('wait.empty'))
+      } else {
+        body = filtered.map((candidate) => {
+          const meta = statusOf(candidate.status, t)
+          const chosen = selected.has(candidate.id)
+          const sessionTitle = titleOf(candidate)
+          const taskTitle = hasText(candidate.taskTitle) ? candidate.taskTitle : t('board.tasks')
+          const workspace = workspaceTitle({ title: candidate.workspaceTitle, path: candidate.workspacePath }, t)
+          return h(
+            'button',
+            {
+              type: 'button',
+              key: candidate.id,
+              className: 'st-quickRow st-waitRow',
+              'data-selected': String(chosen),
+              'aria-pressed': chosen,
+              onClick: () => toggle(candidate.id),
+            },
+            h('span', { className: 'st-waitCheck', 'aria-hidden': true }, chosen ? Icon('check', 11) : null),
+            h(
+              'span',
+              { className: 'st-quickMain' },
+              h('span', { className: 'st-quickRowTitle', title: candidate.text }, candidate.text),
+              h(
+                'span',
+                { className: 'st-quickRowMeta', title: `${taskTitle} · ${workspace} · ${sessionTitle}` },
+                taskTitle,
+                ' · ',
+                workspace,
+                ' · ',
+                sessionTitle,
+              ),
+            ),
+            h('span', { className: 'st-chip', 'data-tone': meta.tone }, meta.label),
+            h('span', { className: 'st-quickRowTime' }, dateTimeText(candidate.createdAt, locale)),
+          )
+        })
+      }
+
+      return h(
+        'div',
+        { className: 'st-quickOverlay', onKeyDown },
+        h('div', { className: 'st-quickScrim', onClick: () => runtime.closeWaitPicker() }),
+        h(
+          'div',
+          {
+            className: 'st-quickCard',
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-label': t('wait.title'),
+          },
+          h(
+            'div',
+            { className: 'st-dialogHead' },
+            h('span', { className: 'st-dialogTitle' }, t('wait.title')),
+            h(
+              'div',
+              { className: 'st-quickHeadActions' },
+              h(IconButton, {
+                icon: 'refresh',
+                label: t('common.refresh'),
+                onClick: () => setReloadNonce((value) => value + 1),
+                disabled: loading || submitting,
+              }),
+              h(IconButton, {
+                icon: 'close',
+                label: t('common.close'),
+                onClick: () => runtime.closeWaitPicker(),
+              }),
+            ),
+          ),
+          h('div', { className: 'st-dialogHint' }, t('wait.hint')),
+          h(
+            'div',
+            { className: 'st-search' },
+            h('span', { className: 'st-searchIcon' }, Icon('search', 13)),
+            h('input', {
+              className: 'st-searchInput',
+              ref: inputRef,
+              value: query,
+              'aria-label': t('wait.search'),
+              placeholder: t('wait.search'),
+              onChange: (event) => setQuery(event.target.value),
+            }),
+            query
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'st-searchClear',
+                    title: t('wait.clearSearch'),
+                    'aria-label': t('wait.clearSearch'),
+                    onClick: () => setQuery(''),
+                  },
+                  Icon('close', 11),
+                )
+              : null,
+          ),
+          h('div', { className: 'st-dialogBody st-quickBody' }, body),
+          error && candidates.length > 0 ? h('div', { className: 'st-waitError' }, error) : null,
+          h(
+            'div',
+            { className: 'st-waitFoot' },
+            h('span', { className: 'st-waitCount' }, countText(t, locale, 'wait.selected', selected.size)),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'st-waitSubmit',
+                title: t(submitting ? 'wait.submitting' : 'wait.submit'),
+                'aria-label': t('wait.submit'),
+                disabled: submitting || selected.size === 0,
+                onClick: submit,
+              },
+              Icon('sendWait', 16),
+            ),
+          ),
+        ),
+      )
+    }
+
+    // ---------------------------------------------------------------------
     // Prompt node
     // ---------------------------------------------------------------------
 
-    function PromptNode({ prompt, index, group, confirming, busy, onJump, onPreview, onPreviewEnd, onAskRemove, onRemove, onCancelRemove }) {
+    function PromptNode({ prompt, index, group, onJump, onPreview, onPreviewEnd }) {
       const runtime = useRuntime()
       const { t } = runtime
       const meta = statusOf(prompt.status, t)
       return h(
-        React.Fragment,
-        null,
+        'div',
+        { className: 'st-nodeRow', 'data-status': meta.status, style: { '--st-accent': group.color } },
         h(
-          'div',
-          { className: 'st-nodeRow', 'data-status': meta.status, style: { '--st-accent': group.color } },
+          'button',
+          {
+            type: 'button',
+            className: 'st-node',
+            onClick: () => onJump(prompt),
+            onMouseEnter: (event) => onPreview(prompt, index, group, event.currentTarget),
+            onFocus: (event) => onPreview(prompt, index, group, event.currentTarget),
+            onMouseLeave: onPreviewEnd,
+            onBlur: onPreviewEnd,
+          },
+          h('span', { className: 'st-nodeText' }, prompt.text),
           h(
-            'button',
-            {
-              type: 'button',
-              className: 'st-node',
-              onClick: () => onJump(prompt),
-              onMouseEnter: (event) => onPreview(prompt, index, group, event.currentTarget),
-              onFocus: (event) => onPreview(prompt, index, group, event.currentTarget),
-              onMouseLeave: onPreviewEnd,
-              onBlur: onPreviewEnd,
-            },
-            h('span', { className: 'st-nodeText' }, prompt.text),
-            h(
-              'span',
-              { className: 'st-nodeMeta' },
-              prompt.status !== 'done' ? h('span', { className: 'st-chip', 'data-tone': meta.tone }, meta.label) : null,
-              h('span', null, dateTimeText(prompt.createdAt, runtime.locale())),
-              prompt.error ? h('span', { className: 'st-nodeError', title: prompt.error }, prompt.error) : null,
-            ),
+            'span',
+            { className: 'st-nodeMeta' },
+            prompt.status !== 'done' ? h('span', { className: 'st-chip', 'data-tone': meta.tone }, meta.label) : null,
+            prompt.status === 'waiting' && Array.isArray(prompt.dependsOn) && prompt.dependsOn.length > 0
+              ? h('span', { className: 'st-chip', 'data-tone': 'warn' }, countText(t, runtime.locale(), 'node.waitingFor', prompt.dependsOn.length))
+              : null,
+            h('span', null, dateTimeText(prompt.createdAt, runtime.locale())),
+            prompt.error ? h('span', { className: 'st-nodeError', title: prompt.error }, prompt.error) : null,
           ),
-          h(IconButton, {
-            icon: 'trash',
-            label: t('task.removePrompt'),
-            size: 12,
-            className: 'st-iconBtn st-nodeRemove',
-            disabled: busy,
-            onClick: () => onAskRemove(prompt),
-          }),
         ),
-        confirming
-          ? h(
-              'div',
-              { className: 'st-confirm' },
-              h('span', null, t('task.removePromptConfirm')),
-              h('button', { type: 'button', className: 'st-btn', 'data-danger': 'true', disabled: busy, onClick: () => onRemove(prompt) }, t('common.delete')),
-              h('button', { type: 'button', className: 'st-btn', disabled: busy, onClick: onCancelRemove }, t('common.cancel')),
-            )
-          : null,
       )
     }
 
@@ -1569,7 +1895,6 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = React.useState(false)
       const [notice, setNotice] = React.useState(null)
       const [confirmDelete, setConfirmDelete] = React.useState(false)
-      const [removePromptId, setRemovePromptId] = React.useState(null)
       const [picker, setPicker] = React.useState(false)
       const [preview, setPreview] = React.useState(null)
       const [sessionEditor, setSessionEditor] = React.useState(null)
@@ -1717,24 +2042,6 @@ window.__ModuleLoader__.load({
         }
       }
 
-      const removePrompt = async (prompt) => {
-        setBusy(true)
-        setNotice(null)
-        try {
-          await runtime.request('/task', {
-            method: 'POST',
-            body: JSON.stringify({ workspaceId, action: 'deletePrompt', taskId, promptId: prompt.id }),
-          })
-          setRemovePromptId(null)
-          setNotice(t('task.removed'))
-          reload()
-        } catch (failure) {
-          setNotice(localizedError(failure, t))
-        } finally {
-          setBusy(false)
-        }
-      }
-
       const saveSessionTitle = async () => {
         if (!sessionEditor || sessionBusy) return
         const title = sessionEditor.value.trim()
@@ -1856,10 +2163,12 @@ window.__ModuleLoader__.load({
         )
       }
 
-      const activeCount = task.prompts.reduce(
-        (count, prompt) => count + (prompt.status === 'queued' || prompt.status === 'running' ? 1 : 0),
-        0,
-      )
+      let activeCount = 0
+      let waitingCount = 0
+      for (const prompt of task.prompts) {
+        if (prompt.status === 'queued' || prompt.status === 'running') activeCount += 1
+        else if (prompt.status === 'waiting') waitingCount += 1
+      }
       const titleNode = editor?.field === 'title'
         ? h(
             'div',
@@ -1872,6 +2181,7 @@ window.__ModuleLoader__.load({
               'aria-label': t('form.title'),
               onChange: (event) => setEditor({ field: 'title', value: event.target.value }),
               onKeyDown: (event) => {
+                if (isImeComposing(event)) return
                 if (event.key === 'Enter') void saveEditor()
                 if (event.key === 'Escape') setEditor(null)
               },
@@ -1907,7 +2217,7 @@ window.__ModuleLoader__.load({
               placeholder: t('form.descriptionPlaceholder'),
               onChange: (event) => setEditor({ field: 'description', value: event.target.value }),
               onKeyDown: (event) => {
-                if (event.key === 'Escape') setEditor(null)
+                if (event.key === 'Escape' && !isImeComposing(event)) setEditor(null)
               },
             }),
             h(
@@ -1961,6 +2271,7 @@ window.__ModuleLoader__.load({
           h('span', { className: 'st-chip' }, countText(t, locale, 'task.promptCount', task.prompts.length)),
           task.prompts.length > 0 ? h('span', { className: 'st-chip' }, countText(t, locale, 'board.sessionCount', groups.length)) : null,
           activeCount > 0 ? h('span', { className: 'st-chip', 'data-tone': 'run' }, t('board.activeCount', { count: activeCount })) : null,
+          waitingCount > 0 ? h('span', { className: 'st-chip', 'data-tone': 'warn' }, countText(t, locale, 'task.waitingCount', waitingCount)) : null,
           h('span', { className: 'st-muted' }, t('task.updated', { time: dateTimeText(task.updatedAt, locale) })),
         ),
       )
@@ -2006,17 +2317,12 @@ window.__ModuleLoader__.load({
                 prompt,
                 index: index + 1,
                 group,
-                busy,
-                confirming: removePromptId === prompt.id,
                 onJump: (item) => {
                   setPreview(null)
                   void runtime.jumpToPrompt(item, taskContext())
                 },
                 onPreview: showPreview,
                 onPreviewEnd: scheduleHide,
-                onAskRemove: (item) => setRemovePromptId(item.id),
-                onRemove: removePrompt,
-                onCancelRemove: () => setRemovePromptId(null),
               }))
             }
             return h(
@@ -2062,6 +2368,7 @@ window.__ModuleLoader__.load({
                       disabled: sessionBusy,
                       onChange: (event) => setSessionEditor({ sessionId: group.sessionId, value: event.target.value }),
                       onKeyDown: (event) => {
+                        if (isImeComposing(event)) return
                         if (event.key === 'Enter') void saveSessionTitle()
                         if (event.key === 'Escape' && !sessionBusy) setSessionEditor(null)
                       },
@@ -2133,6 +2440,10 @@ window.__ModuleLoader__.load({
       let content
       if (view.kind === 'board') {
         content = h(Board, {
+          // Remount on identity change: a board must never paint the previous
+          // workspace/task payload while the next read is in flight, and local
+          // editor/confirm state must not leak across boards.
+          key: `board:${view.workspaceId}`,
           active,
           workspaceId: view.workspaceId,
           onBack: () => setView({ kind: 'overview' }),
@@ -2140,6 +2451,7 @@ window.__ModuleLoader__.load({
         })
       } else if (view.kind === 'task') {
         content = h(TaskDetail, {
+          key: `task:${view.workspaceId}:${view.taskId}`,
           active,
           workspaceId: view.workspaceId,
           taskId: view.taskId,
@@ -2350,6 +2662,16 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'st-captureActions' },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'st-captureBtn',
+              title: t('wait.title'),
+              onClick: () => runtime.openWaitPicker(effective),
+            },
+            t('capture.wait'),
+          ),
           h('button', { type: 'button', className: 'st-captureBtn', onClick: back }, t('capture.back')),
           h('button', { type: 'button', className: 'st-captureBtn', onClick: cancel }, t('capture.cancel')),
         ),
@@ -2379,6 +2701,7 @@ window.__ModuleLoader__.load({
       const memory = { view: { kind: 'overview' } }
       const binding = { current: null }
       const quickOpen = createValueStore(false)
+      const waitPicker = createValueStore(null)
       const viewRequest = createValueStore(null)
       const jumpNotice = createValueStore(null)
       // Reactive mirror of `binding.current` for the capture banner: a slot
@@ -2631,11 +2954,104 @@ window.__ModuleLoader__.load({
       }
 
       function openQuickSwitcher() {
+        waitPicker.set(null)
         quickOpen.set(true)
       }
 
       function closeQuickSwitcher() {
         quickOpen.set(false)
+      }
+
+      /**
+       * Open the dependency-node picker for one attributed conversation. The
+       * picker captures the current composer draft only when its submit action
+       * runs, so the user may type before or after choosing nodes.
+       * @param {{sessionId: string, workspaceId: string, taskId: string, taskTitle?: string}} context - attribution.
+       */
+      function openWaitPicker(context) {
+        if (!context || typeof context.sessionId !== 'string' || !context.sessionId) return
+        if (typeof context.workspaceId !== 'string' || !context.workspaceId) return
+        if (typeof context.taskId !== 'string' || !context.taskId) return
+        quickOpen.set(false)
+        waitPicker.set({
+          sessionId: context.sessionId,
+          workspaceId: context.workspaceId,
+          taskId: context.taskId,
+          taskTitle: typeof context.taskTitle === 'string' ? context.taskTitle : '',
+        })
+      }
+
+      function closeWaitPicker() {
+        waitPicker.set(null)
+      }
+
+      /**
+       * Read the current native composer for one Session. The public
+       * Conversation input facade is owned by the retained Session scope; its
+       * published state is the only place the unsent draft exists.
+       * @param {string} sessionId - native session.
+       * @returns {{input: object, state: object}|null}
+       */
+      function composerState(sessionId) {
+        try {
+          const sessions = serviceOf('sessions')
+          const binding = sessions?.binding?.(sessionId)
+          if (!binding?.ctx) return null
+          const conversation = serviceOf('conversation')
+          const input = conversation?.input?.for?.(binding.ctx)
+          if (!input?.state?.getSnapshot) return null
+          return { input, state: input.state.getSnapshot() }
+        } catch {
+          return null
+        }
+      }
+
+      /**
+       * Capture the composer draft and create a waiting Prompt node. The Host
+       * owns the dependency state and submits through the native Session
+       * admission path after every selected node is terminal.
+       * @param {{sessionId: string, workspaceId: string, taskId: string}} context - attribution.
+       * @param {string[]} dependsOn - selected prompt node ids.
+       * @returns {Promise<object>} bridge response.
+       */
+      async function submitWaitingDraft(context, dependsOn, commitId) {
+        if (!context || typeof context.sessionId !== 'string' || !context.sessionId) {
+          throw new Error(t('wait.error.composer'))
+        }
+        if (!Array.isArray(dependsOn) || dependsOn.length === 0) {
+          throw new Error(t('wait.error.select'))
+        }
+        const composer = composerState(context.sessionId)
+        if (!composer) throw new Error(t('wait.error.composer'))
+        const { input, state } = composer
+        if (state.phase !== 'plain' || state.claim) throw new Error(t('wait.error.busy'))
+        if (!hasText(state.draft)) throw new Error(t('wait.error.noDraft'))
+        if (Array.isArray(state.attachmentIds) && state.attachmentIds.length > 0) {
+          throw new Error(t('wait.error.attachments'))
+        }
+        if (Array.isArray(state.occurrences) && state.occurrences.length > 0) {
+          throw new Error(t('wait.error.quoted'))
+        }
+        if (state.draft.trimStart().startsWith('/')) throw new Error(t('wait.error.command'))
+        if (state.draft.length > MAX_DRAFT_CHARS) throw new Error(t('wait.error.tooLong'))
+        const payload = await request('/task', {
+          method: 'POST',
+          body: JSON.stringify({
+            workspaceId: context.workspaceId,
+            action: 'deferPrompt',
+            taskId: context.taskId,
+            sessionId: context.sessionId,
+            text: state.draft,
+            dependsOn,
+            ...(typeof commitId === 'string' && commitId ? { commitId } : {}),
+          }),
+        })
+        try {
+          input.setDraft('')
+        } catch (error) {
+          console.warn(`[${PKG}] could not clear the captured draft`, error)
+        }
+        return payload
       }
 
       /**
@@ -2650,6 +3066,7 @@ window.__ModuleLoader__.load({
         memory.view = view
         viewRequest.set(view)
         quickOpen.set(false)
+        waitPicker.set(null)
         try {
           serviceOf('layout')?.selectPanel?.(PANEL_ID)
         } catch (error) {
@@ -2832,6 +3249,10 @@ window.__ModuleLoader__.load({
           setJumpNotice(task, 'error', t('jump.noSession'))
           return
         }
+        if (prompt.status === 'waiting') {
+          setJumpNotice(task, 'info', t('jump.waiting'))
+          return
+        }
         const sessionId = prompt.sessionId
         const token = ++jumpToken
         if (task && task.workspaceId && task.taskId) {
@@ -2937,9 +3358,13 @@ window.__ModuleLoader__.load({
         releaseSessionBinding,
         cancelPendingJump,
         quickOpen,
+        waitPicker,
         viewRequest,
         openQuickSwitcher,
         closeQuickSwitcher,
+        openWaitPicker,
+        closeWaitPicker,
+        submitWaitingDraft,
         navigateToTask,
         returnToTask,
         recordTaskVisit,
@@ -2978,6 +3403,10 @@ window.__ModuleLoader__.load({
         return h(RuntimeContext.Provider, { value: runtime }, h(QuickSwitcher))
       }
 
+      function BoundWaitPicker() {
+        return h(RuntimeContext.Provider, { value: runtime }, h(WaitPicker))
+      }
+
       function TaskCenterIcon(props) {
         return h('span', { className: 'st-panelIcon' }, Icon('checklist', typeof props.size === 'number' ? props.size : 16))
       }
@@ -3010,10 +3439,14 @@ window.__ModuleLoader__.load({
       // The input dock exists in both the blank hero and a running
       // conversation; the composer dock does not render in the hero, where a
       // freshly created session starts.
+      // Keep this before the native QueueDock (order 20). QueueDock is
+      // intentionally the last dock entry: it tucks its bottom edge 3px under
+      // the composer card with a negative margin. A later entry would take the
+      // composer's place and cover that seam while a prompt is queued.
       ctx.effect(
         () =>
           ctx.slots.inject('conversation.input.dock', () =>
-            ctx.slots.register({ name: 'conversation.input.dock', id: 'session-todo-capture', order: 30, locale: NS }, BoundCaptureBanner),
+            ctx.slots.register({ name: 'conversation.input.dock', id: 'session-todo-capture', order: 10, locale: NS }, BoundCaptureBanner),
           ),
         `${PKG}: capture banner`,
       )
@@ -3023,6 +3456,13 @@ window.__ModuleLoader__.load({
             ctx.slots.register({ name: 'shell.overlay', id: 'session-todo-quick-switcher', order: 20, locale: NS }, BoundQuickSwitcher),
           ),
         `${PKG}: quick switcher overlay`,
+      )
+      ctx.effect(
+        () =>
+          ctx.slots.inject('shell.overlay', () =>
+            ctx.slots.register({ name: 'shell.overlay', id: 'session-todo-wait-picker', order: 21, locale: NS }, BoundWaitPicker),
+          ),
+        `${PKG}: wait picker overlay`,
       )
 
       ctx.inject(['shortcuts'], (scope) => {
@@ -3061,6 +3501,6 @@ window.__ModuleLoader__.load({
 
     }
 
-    return { inject: ['slots', 'locale', 'layout', 'uiWorkspace', 'sessions'], apply }
+    return { inject: ['slots', 'locale', 'layout', 'uiWorkspace', 'sessions', 'conversation'], apply }
   },
 })

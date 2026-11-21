@@ -4,8 +4,9 @@
  * Tasks belong to workspaces and are session-free. A task records real prompt
  * turns from any number of native sessions; opening a session from a prompt
  * board binds it to that task, and every message the user later sends in the
- * session's own composer is recorded until the binding is released. The Host
- * never submits or queues prompts.
+ * session's own composer is recorded until the binding is released. A prompt
+ * can also be created to wait for other prompt nodes; it is submitted to its
+ * native session only after every dependency reaches a terminal state.
  *
  * @module @local/dsh-session-todo
  */
@@ -16,7 +17,7 @@ import { ROUTE, createRoutes } from './routes.js'
 import { createStore, describe } from './store.js'
 
 /** Host capabilities required by the task center. */
-export const inject = ['webServer', 'workspaceRegistry', 'sessionQuery']
+export const inject = ['webServer', 'workspaceRegistry', 'sessionQuery', 'sessionController', 'agents']
 
 /**
  * Apply the Host half.
@@ -31,6 +32,18 @@ export function apply(ctx) {
   ctx.effect(
     () => ctx.on('session/event', tracker.onSessionEvent, { global: true }),
     'session-todo: prompt attribution observer',
+  )
+  ctx.effect(
+    () => ctx.on('agent/inbox/discarded', (payload) => tracker.onInboxDiscarded(payload?.message)),
+    'session-todo: waiting dependency cancellation observer',
+  )
+  ctx.effect(
+    () => ctx.on('agent/status', ({ status }) => {
+      // The last queued/steered turn ends before the Agent publishes idle.
+      // Releasing on idle is what makes the wait cover the whole batch.
+      if (status === 'idle') tracker.releaseReady()
+    }),
+    'session-todo: waiting dependency idle observer',
   )
   ctx.effect(
     () => ctx.webServer.register({ kind: 'prefix', path: ROUTE, handler }),

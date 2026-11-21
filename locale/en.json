@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Task center",
-    "description": "Workspace task control: overview → task board → session-grouped prompt graph. Entering a session from a task board durably attributes its later sends to that task until you cancel the attribution, delete the task, or re-assign the session to another task. Session titles stay in sync both ways, and a keyboard quick switcher jumps straight to any task's prompt board."
+    "description": "Workspace task control: overview → task board → session-grouped prompt graph. Entering a session from a task board durably attributes its later sends to that task until you cancel the attribution, delete the task, or re-assign the session to another task. Session titles stay in sync both ways, a keyboard quick switcher jumps straight to any task's prompt board, and a prompt can wait for several nodes and for their native queue/steer batches to drain before it is submitted to its session."
   }
 }

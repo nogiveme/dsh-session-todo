@@ -1,10 +1,10 @@
 {
   "name": "@local/dsh-session-todo",
-  "version": "4.3.0",
+  "version": "4.5.0",
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "Workspace task control center: projects, task boards, a session-grouped prompt graph with durable per-session task attribution and native session-title sync, and a keyboard quick task switcher. Opening a session from a prompt board attributes it to that task; the assignment is persisted and shown on every later entry until Cancel.",
+  "description": "Workspace task control center: projects, task boards, a session-grouped prompt graph with durable per-session task attribution, native session-title sync, a keyboard quick task switcher, and prompts that wait for one or more other prompt nodes and the dependency sessions' queue/steer batches to drain before being submitted to their native session.",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
@@ -34,6 +34,7 @@
       "immediately": true,
       "inject": [
         "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-layout",
         "@deepseek-ai/dsh-client-ui-sidebar",
         "@deepseek-ai/dsh-client-ui-workspace"

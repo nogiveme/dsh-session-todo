@@ -4,12 +4,16 @@
  * Routes are local-only and split by view: the overview lists workspace
  * summaries, the task board reads one workspace, and the prompt board reads
  * one task. The capture routes arm, inspect, and release a session's task
- * binding. Prompt request ids stay on the Host; the browser never needs them.
+ * binding; the waiting routes list dependency candidates and create one
+ * waiting node. Prompt request ids stay on the Host; the browser never needs
+ * them.
  *
  * @module @local/dsh-session-todo/routes
  */
 import {
+  MAX_DEPENDENCIES,
   MAX_DESCRIPTION_CHARS,
+  MAX_PROMPT_CHARS,
   MAX_TITLE_CHARS,
   SESSION_ID_RE,
   describe,
@@ -30,6 +34,7 @@ export function createRoutes({ ctx, store, tracker, logger }) {
     ['GET /workspaces', listWorkspaces],
     ['GET /workspace', getWorkspace],
     ['GET /tasks', listTasks],
+    ['GET /prompt-candidates', listPromptCandidates],
     ['GET /task', getTask],
     ['POST /task', postTask],
     ['GET /capture', getCapture],
@@ -147,6 +152,54 @@ export function createRoutes({ ctx, store, tracker, logger }) {
     send(res, 200, { ok: true, tasks })
   }
 
+  /** Recent prompt nodes a waiting prompt can depend on. */
+  async function listPromptCandidates(req, res, url) {
+    await store.ensure()
+    const rawLimit = Number(url.searchParams.get('limit'))
+    const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 100
+    let workspaces
+    try {
+      workspaces = ctx.workspaceRegistry.list()
+    } catch (error) {
+      logger?.warn?.(`[session-todo] workspace registry unavailable for /prompt-candidates: ${describe(error)}`)
+      workspaces = Object.keys(store.data?.workspaces ?? {}).map((id) => ({ id, title: '' }))
+    }
+    const candidates = []
+    for (const workspace of workspaces) {
+      const workspaceId = typeof workspace?.id === 'string' ? workspace.id : ''
+      if (!workspaceId) continue
+      let tasks
+      try {
+        tasks = tasksOf(workspaceId)
+      } catch {
+        continue
+      }
+      for (const task of tasks) {
+        for (const prompt of Array.isArray(task?.prompts) ? task.prompts : []) {
+          if (!prompt || typeof prompt.sessionId !== 'string' || !prompt.sessionId) continue
+          if (!['queued', 'running', 'waiting', 'done', 'failed', 'cancelled'].includes(prompt.status)) continue
+          candidates.push({
+            id: prompt.id,
+            text: trimText(prompt.text, 500),
+            sessionId: prompt.sessionId,
+            status: prompt.status,
+            createdAt: Number.isFinite(prompt.createdAt) ? prompt.createdAt : 0,
+            taskId: task.id,
+            taskTitle: typeof task.title === 'string' ? task.title : '',
+            workspaceId,
+            workspaceTitle: typeof workspace.title === 'string' ? workspace.title : '',
+            workspacePath: typeof workspace.path === 'string' ? workspace.path : '',
+          })
+        }
+      }
+    }
+    candidates.sort(
+      (left, right) => right.createdAt - left.createdAt
+        || String(left.id).localeCompare(String(right.id)),
+    )
+    send(res, 200, { ok: true, prompts: candidates.slice(0, limit) })
+  }
+
   async function postTask(req, res) {
     const body = await readJson(req)
     const workspace = requireWorkspace(body?.workspaceId)
@@ -189,19 +242,75 @@ export function createRoutes({ ctx, store, tracker, logger }) {
     if (action === 'deleteTask') {
       delete bucket.tasks[task.id]
       tracker.cancelForTask(task.id)
+      tracker.promptsRemoved()
       bucket.updatedAt = Date.now()
       await store.save()
       send(res, 200, { ok: true })
       return
     }
 
-    if (action === 'deletePrompt') {
-      const index = task.prompts.findIndex((prompt) => prompt.id === body.promptId)
-      if (index < 0) throw fail(404, 'prompt_not_found', 'prompt not found')
-      task.prompts.splice(index, 1)
-      touch(bucket, task)
-      await store.save()
-      send(res, 200, { ok: true })
+    if (action === 'deferPrompt') {
+      const sessionId = requireSessionId(body.sessionId)
+      if (!(workspace.sessionIds ?? []).includes(sessionId)) {
+        throw fail(400, 'session_not_in_workspace', 'session does not belong to this workspace')
+      }
+      const commitId = typeof body.commitId === 'string' && body.commitId ? body.commitId.slice(0, 100) : null
+      if (commitId) {
+        const existing = tracker.findPromptByCommitId(commitId)
+        if (existing) {
+          send(res, 200, {
+            ok: true,
+            prompt: { id: existing.prompt.id, status: existing.prompt.status, dependsOn: existing.prompt.dependsOn },
+            replayed: true,
+          })
+          return
+        }
+      }
+      const text = trimText(body.text, MAX_PROMPT_CHARS)
+      if (!text.trim()) throw fail(400, 'text_required', 'prompt text cannot be empty')
+      const rawDependencies = Array.isArray(body.dependsOn) ? body.dependsOn : []
+      const archivedSessions = new Set(
+        Array.isArray(ctx.workspaceRegistry?.archivedSessionIds) ? ctx.workspaceRegistry.archivedSessionIds : [],
+      )
+      const dependsOn = []
+      for (const dependency of rawDependencies) {
+        if (typeof dependency !== 'string' || !dependency || dependency.length > 100) {
+          throw fail(400, 'dependency_required', 'dependency prompt id is required')
+        }
+        if (dependsOn.includes(dependency)) continue
+        if (dependsOn.length >= MAX_DEPENDENCIES) {
+          throw fail(400, 'too_many_dependencies', 'too many dependency prompts')
+        }
+        const found = tracker.findPromptById(dependency)
+        if (!found) throw fail(404, 'dependency_not_found', 'dependency prompt not found')
+        const dependencyWorkspace = findWorkspace(found.workspaceId)
+        if (!found.prompt.sessionId
+          || !dependencyWorkspace
+          || !(dependencyWorkspace.sessionIds ?? []).includes(found.prompt.sessionId)
+          || archivedSessions.has(found.prompt.sessionId)
+          || found.prompt.status === 'draft'
+          || found.prompt.status === 'unknown') {
+          throw fail(400, 'dependency_not_executable', 'dependency prompt has no executable session')
+        }
+        dependsOn.push(dependency)
+      }
+      if (dependsOn.length === 0) {
+        throw fail(400, 'dependency_required', 'select at least one dependency prompt')
+      }
+      const prompt = await tracker.deferPrompt({
+        workspaceId: workspace.id,
+        taskId: task.id,
+        sessionId,
+        text,
+        dependsOn,
+        commitId,
+      })
+      if (!prompt) throw fail(404, 'task_not_found', 'task not found')
+      // The waiting node is durable before release: dispatch may resume a
+      // cold Session, and a crash must not leave a native prompt without its
+      // task record.
+      tracker.releaseReady()
+      send(res, 200, { ok: true, prompt: { id: prompt.id, status: prompt.status, dependsOn: prompt.dependsOn } })
       return
     }
 
@@ -325,9 +434,11 @@ function taskSummary(task) {
   const prompts = Array.isArray(task?.prompts) ? task.prompts : []
   const sessions = new Set()
   let activePromptCount = 0
+  let waitingPromptCount = 0
   for (const prompt of prompts) {
     if (prompt?.sessionId) sessions.add(prompt.sessionId)
     if (isActive(prompt)) activePromptCount += 1
+    if (prompt?.status === 'waiting') waitingPromptCount += 1
   }
   return {
     id: typeof task?.id === 'string' ? task.id : '',
@@ -336,6 +447,7 @@ function taskSummary(task) {
     promptCount: prompts.length,
     sessionCount: sessions.size,
     activePromptCount,
+    waitingPromptCount,
     createdAt: Number.isFinite(task?.createdAt) ? task.createdAt : 0,
     updatedAt: Number.isFinite(task?.updatedAt) ? task.updatedAt : 0,
     lastVisitedAt: Number.isFinite(task?.lastVisitedAt) ? task.lastVisitedAt : null,
@@ -358,6 +470,7 @@ function publicTask(task) {
       eventSeq: Number.isFinite(prompt.eventSeq) ? prompt.eventSeq : null,
       turn: Number.isFinite(prompt.turn) ? prompt.turn : null,
       status: prompt.status,
+      dependsOn: Array.isArray(prompt.dependsOn) ? [...prompt.dependsOn] : [],
       createdAt: prompt.createdAt,
       startedAt: Number.isFinite(prompt.startedAt) ? prompt.startedAt : null,
       finishedAt: Number.isFinite(prompt.finishedAt) ? prompt.finishedAt : null,

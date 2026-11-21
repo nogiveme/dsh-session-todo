@@ -14,13 +14,14 @@ import { dirname } from 'node:path'
 export const STORE_VERSION = 3
 export const MAX_TASKS = 200
 export const MAX_PROMPTS = 500
+export const MAX_DEPENDENCIES = 20
 export const MAX_SESSION_TASKS = 1000
 export const MAX_PROMPT_CHARS = 20000
 export const MAX_TITLE_CHARS = 200
 export const MAX_DESCRIPTION_CHARS = 600
 export const SESSION_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/
 export const TASK_ID_RE = /^[A-Za-z0-9_-]{8,80}$/
-export const PROMPT_STATUSES = new Set(['draft', 'queued', 'running', 'done', 'failed', 'cancelled', 'unknown'])
+export const PROMPT_STATUSES = new Set(['draft', 'queued', 'running', 'waiting', 'done', 'failed', 'cancelled', 'unknown'])
 
 /**
  * Open the JSON store lazily.
@@ -230,6 +231,13 @@ export function normalizeTask(task, fallbackId) {
     let promptId = typeof prompt.id === 'string' && TASK_ID_RE.test(prompt.id) ? prompt.id : newId('prompt')
     if (seen.has(promptId)) promptId = `${promptId}-${index}`
     seen.add(promptId)
+    const dependsOn = []
+    for (const dependency of Array.isArray(prompt.dependsOn) ? prompt.dependsOn : []) {
+      if (typeof dependency !== 'string' || !TASK_ID_RE.test(dependency)) continue
+      if (dependsOn.includes(dependency)) continue
+      dependsOn.push(dependency)
+      if (dependsOn.length >= MAX_DEPENDENCIES) break
+    }
     prompts.push({
       id: promptId,
       text,
@@ -238,6 +246,8 @@ export function normalizeTask(task, fallbackId) {
       eventSeq: Number.isFinite(prompt.eventSeq) ? prompt.eventSeq : null,
       turn: Number.isFinite(prompt.turn) ? prompt.turn : null,
       status: PROMPT_STATUSES.has(prompt.status) ? prompt.status : 'draft',
+      dependsOn,
+      commitId: typeof prompt.commitId === 'string' && prompt.commitId ? prompt.commitId.slice(0, 100) : null,
       createdAt: Number.isFinite(prompt.createdAt) ? prompt.createdAt : now,
       updatedAt: Number.isFinite(prompt.updatedAt) ? prompt.updatedAt : now,
       startedAt: Number.isFinite(prompt.startedAt) ? prompt.startedAt : null,
