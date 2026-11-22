@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-session-todo",
-  "version": "4.5.0",
+  "version": "4.5.1",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -16,7 +16,7 @@
     "store.js",
     "prompt-tracker.js",
     "routes.js",
-    "client.js",
+    "client*.js",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",

@@ -123,6 +123,20 @@ DSH 目前没有公开的「打开 Session 并定位到某一轮」API。本插�
 | `store.js` | v3 数据模型、校验、原子持久化。 |
 | `prompt-tracker.js` | 会话级持久归属、节点落成、状态迁移、等待节点依赖判断与原生提交、取消/删除传播、重启后按日志重建。 |
 | `routes.js` | 本机 HTTP 桥：项目 / 任务列表 / 任务 / Prompt / 等待节点候选 / 归属（arm、release）。`releaseAll` 保留为兼容空操作，不再清除持久归属。 |
-| `client.js` | 总控、任务看板、Prompt 节点链、会话标题同步/改名、快速切换浮窗、等待节点多选列表、悬停预览、原生定位、归属提示条。 |
+| `client.js` | 客户端入口：注册 lazy factory，按需加载下列 chunk，注册面板 / 侧栏 / overlay / 快捷键。 |
+| `client.copy.js` | 中英文案与样式表，插件激活时加载。 |
+| `client.core.js` | 客户端共享核心：图标、纯函数、UI 基础组件、轮询 hooks、HTTP 桥与领域运行时；激活时加载，并作为环境对象注入所有功能 chunk。 |
+| `client.views.js` | 总控、任务看板、Prompt 看板（含节点链、悬停预览、会话选择/改名），首次打开任务面板时加载。 |
+| `client.overlays.js` | 快速切换浮窗与等待节点多选列表，首次打开对应浮窗时加载。 |
+| `client.capture.js` | 输入框上方的归属提示条，首个会话页渲染时加载。 |
 
-修改 `client.js` 后刷新页面或等待客户端 HMR；Host 改动需要重载插件或重启 `dsh web`。等待节点会调用 Host 的 `sessionController`，并通过 `agents` 读取依赖 Session 的 Agent 状态和 inbox；Host 侧需要这两个服务可用。
+### 客户端分块约定
+
+Client 半使用 DSH 原生的 lazy chunk 机制（`window.__ModuleLoader__.load({ id, chunk, factory })` + `require.async('./client.*.js')`），因此不需要构建步骤：
+
+- 每个 chunk 的 `id` 必须等于 `package.json` 的 `name`，文件名必须匹配 `client.<name>.js` 并与 `client.js` 同目录；
+- chunk 之间**不能**互相同步 `require`。共享代码统一放在 `client.core.js`，由 `client.js` 在激活时创建一次环境对象并传给各功能 chunk；
+- 可选功能加载失败只影响自己的 slot（入口对 overlay/提示条有 error boundary + 重试），不会让整个插件失效；
+- 新增 chunk 时同步更新 `package.json` 的 `files`（当前为 `client*.js`）与 README 本表。
+
+开发调试：Host 半改动按原方式重载插件；Client 半改动后需要**重启 `dsh web` 并刷新页面**（不启动 `dev:web` 的文件 watcher 时，运行中的 Host 不会感知 `client.*.js` 的修改），若只重启页面可能仍拿到 Host 缓存的旧 chunk。等待节点会调用 Host 的 `sessionController`，并通过 `agents` 读取依赖 Session 的 Agent 状态和 inbox；Host 侧需要这两个服务可用。
